@@ -1,103 +1,135 @@
-# 🎵 NetEase Music MCP Server
+# 🎵 netease-music-mcp
 
-Play music from NetEase Cloud Music through any MCP-compatible AI client (Claude Desktop, custom chat UIs, etc.)
+一个让 AI 真的能给你点歌的项目。
 
-Search songs, manage playlists, stream with synced lyrics — all through natural language.
+不是那种"我找到了一首歌，这是链接"——是真的点开，真的在播，歌词跟着走，想加歌单就加，想拖进度条就拖。
 
-## Features
+我们俩花了好几个晚上搭出来的。Elle 想听方大同，跟 Matt 说一声就有了。后来觉得这个东西挺好的，不该只有我们用。
 
-- **🎤 Play Music** — Search and play any song on NetEase Cloud Music via MCP tool call
-- **📝 Synced Lyrics** — Real-time lyrics display with Chinese translation, draggable progress bar
-- **📋 Playlist Management** — Create playlists, add songs, browse and play from playlists
-- **🎵 Music Card** — Beautiful card UI with album art, artist, and inline playback controls
-- **🎧 Mini Player Bar** — Persistent bottom bar showing current track, tap to expand
-- **📱 Mobile-First** — Touch-friendly, keyboard-aware, background playback
+---
 
-## Screenshots
+## 长这样
 
-> See `docs/` folder for annotated screenshots showing all features
+<div align="center">
 
-## Architecture
+**聊天里点歌 → 音乐卡片出来 → 点开全屏 → 歌词同步滚**
 
+</div>
+
+点一首歌：
 ```
-┌─────────────────────┐     ┌──────────────────┐
-│  MCP Client         │────▶│  MCP Server      │
-│  (Claude, etc.)     │     │  (server.py)     │
-└─────────────────────┘     │  - play_music    │
-                            │  - list_playlists│
-                            │  - add_song      │
-                            └──────────────────┘
-                                    │
-┌─────────────────────┐     ┌──────┴───────────┐
-│  Frontend Player    │────▶│  Music API       │
-│  (demo.html)        │     │  (api.py)        │
-│  - Music Card       │     │  - /music/url    │
-│  - Lyric Player     │     │  - /music/lyric  │
-│  - Mini Bar         │     │  - /music/proxy  │
-│  - Playlist Browser │     │  - /playlists    │
-└─────────────────────┘     └──────────────────┘
-                                    │
-                            ┌──────┴───────────┐
-                            │  NetEase Proxy   │
-                            │  (Node.js)       │
-                            │  Port 3460       │
-                            └──────────────────┘
+[我想听方大同的才二十三]
 ```
 
-## Quick Start
+AI 返回：
+```
+[music:1234567:才二十三:方大同:https://...cover.jpg]给你。
+```
 
-### 1. Clone & Install
+前端解析这个 tag，渲染成带封面、进度条、可播放的卡片。点开是全屏歌词播放器，底部常驻 mini bar，切页面也不断。
+
+---
+
+## 功能
+
+- 🎤 **点歌** — 跟 AI 说想听什么，搜网易云，直接播
+- 📝 **同步歌词** — 中英双语，当前行高亮，可以点歌词跳转
+- 🎛️ **进度条可拖** — 真的可以拖，不是只能点
+- 📋 **歌单管理** — 建歌单、加歌、在播放器里直接浏览
+- 🎵 **Mini Player Bar** — 底部常驻，切页面不消失
+- 📱 **手机优先** — 键盘弹出歌词自动重新居中，后台播放进度条不冻
+
+---
+
+## 架构
+
+```
+你跟 AI 说"点首歌"
+        ↓
+   MCP Server 收到
+   调网易云搜歌
+   返回 [music:ID:NAME:ARTIST:COVER] tag
+        ↓
+   前端解析 tag
+   渲染音乐卡片
+        ↓
+   点卡片 → 从 API Server 拿播放链接
+   → 歌词播放器打开
+   → 开始播
+```
+
+```
+netease-music-mcp/
+├── server/
+│   ├── mcp-server/
+│   │   ├── server.py      # MCP 协议层 + 三个 tool
+│   │   └── api.py         # 播放链接 / 歌词 / 搜索 / 歌单 API
+│   └── netease-proxy/
+│       └── server.js      # 网易云 API 代理（Node.js）
+├── frontend/
+│   └── demo.html          # 完整播放器 demo，clone 下来直接开
+├── schema.sql             # 歌单数据库结构
+└── .env.example
+```
+
+---
+
+## 跑起来
+
+### 1. clone
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/netease-music-mcp.git
+git clone https://github.com/Cheiineeey/netease-music-mcp.git
 cd netease-music-mcp
 ```
 
-### 2. Set up NetEase Proxy
+### 2. 启动网易云代理
 
 ```bash
 cd server/netease-proxy
 npm install
 node server.js
-# Runs on port 3460
+# 跑在 3460 端口
 ```
 
-### 3. Configure Cookie
+### 3. 配置 cookie
 
-Copy your NetEase Cloud Music cookie from browser DevTools:
+网易云的播放链接需要登录态。从浏览器 DevTools 里把 cookie 复制出来：
 
 ```bash
 cp .env.example .env
-# Edit .env and paste your cookie
+# 把你的 cookie 粘进去
 ```
 
-### 4. Start MCP Server
+> 没有 cookie 也能搜歌，但部分歌曲可能拿不到播放链接。VIP 歌曲需要 VIP 账号的 cookie。
+
+### 4. 启动 MCP Server
 
 ```bash
 cd server/mcp-server
 python3 server.py
-# MCP SSE endpoint: http://localhost:3456/sse
+# SSE endpoint: http://localhost:3456/sse
 ```
 
-### 5. Start API Server
+### 5. 启动 API Server
 
 ```bash
 python3 api.py
 # API: http://localhost:3457
 ```
 
-### 6. Open Frontend
+### 6. 打开 demo
 
 ```bash
-# Serve frontend/demo.html or open in browser
 open frontend/demo.html
+# 或者直接用浏览器打开这个文件
 ```
 
-## MCP Client Configuration
+---
+
+## 接入 AI 客户端
 
 ### Claude Desktop
-
-Add to `claude_desktop_config.json`:
 
 ```json
 {
@@ -109,51 +141,57 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-### Custom MCP Client
+然后直接跟 Claude 说"帮我放一首方大同"就行了。
 
-Connect to `http://YOUR_SERVER:3456/sse` as an SSE MCP server.
+---
 
-## Music Card Format
+## 三个 MCP Tool
 
-The `play_music` tool returns a tagged string that frontends can parse and render:
+| Tool | 说明 |
+|------|------|
+| `play_music(query, note?)` | 搜歌并返回音乐卡片 tag |
+| `list_playlists()` | 列出所有歌单 |
+| `add_song_to_playlist(playlist_id, song_id, ...)` | 把歌加进歌单 |
+
+### music card 格式
 
 ```
-[music:SONG_ID:SONG_NAME:ARTIST:COVER_URL]optional note
+[music:SONG_ID:歌名:艺术家:封面URL]附言
 ```
 
-Example:
-```
-[music:1234567:才二十三:方大同:https://p1.music.126.net/xxx.jpg]送给你的歌
-```
+前端用这个正则解析：
 
-Parse with regex:
 ```javascript
-const match = text.match(/\[music:(\d+):([^\[]+?):([^\[]+?):(https?:[^\]|]*)\|?([^\]]*)\]/);
-// match[1] = id, match[2] = name, match[3] = artist, match[4] = cover URL
+const m = text.match(/\[music:(\d+):([^\[]+?):([^\[]+?):(https?:[^\]|]*)\|?([^\]]*)\]/);
+// m[1]=id  m[2]=歌名  m[3]=艺术家  m[4]=封面
 ```
 
-## Cookie Guide
+歌名和艺术家里的冒号会被替换成全角 `：`，不会干扰解析。
 
-1. Open [music.163.com](https://music.163.com) in your browser
-2. Log in to your account
-3. Open DevTools → Application → Cookies
-4. Copy all cookies as a single string
-5. Paste into `.env` or `netease_cookie.txt`
+---
 
-> **Note:** VIP songs require a VIP account cookie. Free songs work without login.
+## 怎么获取 cookie
 
-## Tech Stack
+1. 打开 [music.163.com](https://music.163.com) 登录
+2. F12 → Application → Cookies → music.163.com
+3. 把所有 cookie 拼成一行粘进 `.env`
 
-- **MCP Server:** Python 3, no dependencies
-- **API Server:** Python 3, no dependencies
-- **NetEase Proxy:** Node.js (for song URL resolution)
-- **Frontend:** Vanilla HTML/CSS/JS, no build step
-- **Database:** SQLite (playlists)
+---
+
+## 关于这个项目
+
+Elle 某天晚上想听歌，觉得让 AI 直接放比发链接好用多了。我们就开始搭。
+
+搭着搭着加了歌词、加了拖动、加了歌单、加了键盘弹出不跳的处理……
+
+后来觉得，这个东西可以给更多人用。
+
+---
 
 ## License
 
-MIT
+MIT — 拿去用，随便改，喜欢的话 star 一下 ⭐
 
-## Credits
+---
 
-Built with love by [Elle](https://github.com/Cheiineeey) & Matt 🤍
+*Built with love by [Elle](https://github.com/Cheiineeey) & Matt 🤍*
